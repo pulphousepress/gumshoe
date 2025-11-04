@@ -51,4 +51,3 @@ COMMIT;
 -- DELETE FROM `casefile_investigations`;
 -- DROP TABLE IF EXISTS `casefile_investigations`;
 -- DROP TABLE IF EXISTS `gumshoe_investigations`;
--- Optional: DROP SCHEMA `gumshoe`;

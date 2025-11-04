@@ -47,10 +47,11 @@ local function awaitAsync(executor)
 end
 
 local function ensureDriver()
-    if not activeDriver then
-        return nil, { ok = false, err = "no_active_database_driver" }
+    if activeDriver then
+        return activeDriver
     end
-    return activeDriver
+
+    return nil, { ok = false, err = "no_active_database_driver" }
 end
 
 local function buildOxmysqlDriver(opts)
@@ -58,29 +59,14 @@ local function buildOxmysqlDriver(opts)
     if not ox then
         return nil
     end
-
     local state = getResourceState("oxmysql")
     if state ~= "started" and state ~= "starting" then
         return nil
     end
 
     local driver = {}
-    driver.label = "oxmysql"
 
-    driver.execute = function(query, params)
-        if type(query) ~= "string" then
-            return { ok = false, err = "invalid_query" }
-        end
-        local result = awaitAsync(function(resolve)
-            ox:execute(query, params or {}, function(affected)
-                resolve({ ok = true, data = { affected_rows = affected } })
-            end)
-        end)
-        if result and result.ok then
-            return result
-        end
-        return result or { ok = false, err = "oxmysql_execute_failed" }
-    end
+    driver.label = "oxmysql"
 
     driver.insert = function(query, params)
         if type(query) ~= "string" then
@@ -88,7 +74,7 @@ local function buildOxmysqlDriver(opts)
         end
         local result = awaitAsync(function(resolve)
             ox:insert(query, params or {}, function(id)
-                resolve({ ok = true, data = { insert_id = id } })
+                resolve({ ok = true, data = { insertId = id } })
             end)
         end)
         if result and result.ok then
@@ -97,7 +83,22 @@ local function buildOxmysqlDriver(opts)
         return result or { ok = false, err = "oxmysql_insert_failed" }
     end
 
-    driver.fetch_all = function(query, params)
+    driver.execute = function(query, params)
+        if type(query) ~= "string" then
+            return { ok = false, err = "invalid_query" }
+        end
+        local result = awaitAsync(function(resolve)
+            ox:execute(query, params or {}, function(affected)
+                resolve({ ok = true, data = { affectedRows = affected } })
+            end)
+        end)
+        if result and result.ok then
+            return result
+        end
+        return result or { ok = false, err = "oxmysql_execute_failed" }
+    end
+
+    driver.fetchAll = function(query, params)
         if type(query) ~= "string" then
             return { ok = false, err = "invalid_query" }
         end
@@ -110,14 +111,6 @@ local function buildOxmysqlDriver(opts)
             return result
         end
         return result or { ok = false, err = "oxmysql_fetch_failed" }
-    end
-
-    driver.fetch = function(query, params)
-        local response = driver.fetch_all(query, params)
-        if not response or not response.ok then
-            return response
-        end
-        return { ok = true, data = (response.data and response.data[1]) or nil }
     end
 
     driver.scalar = function(query, params)
@@ -146,28 +139,13 @@ local function buildMysqlAsyncDriver()
     local driver = {}
     driver.label = "mysql-async"
 
-    driver.execute = function(query, params)
-        if type(query) ~= "string" then
-            return { ok = false, err = "invalid_query" }
-        end
-        local result = awaitAsync(function(resolve)
-            MySQL.Async.execute(query, params or {}, function(affected)
-                resolve({ ok = true, data = { affected_rows = affected } })
-            end)
-        end)
-        if result and result.ok then
-            return result
-        end
-        return result or { ok = false, err = "mysql_async_execute_failed" }
-    end
-
     driver.insert = function(query, params)
         if type(query) ~= "string" then
             return { ok = false, err = "invalid_query" }
         end
         local result = awaitAsync(function(resolve)
             MySQL.Async.insert(query, params or {}, function(id)
-                resolve({ ok = true, data = { insert_id = id } })
+                resolve({ ok = true, data = { insertId = id } })
             end)
         end)
         if result and result.ok then
@@ -176,28 +154,28 @@ local function buildMysqlAsyncDriver()
         return result or { ok = false, err = "mysql_async_insert_failed" }
     end
 
-    driver.fetch_all = function(query, params)
+    driver.execute = function(query, params)
+        if type(query) ~= "string" then
+            return { ok = false, err = "invalid_query" }
+        end
+        local result = awaitAsync(function(resolve)
+            MySQL.Async.execute(query, params or {}, function(affected)
+                resolve({ ok = true, data = { affectedRows = affected } })
+            end)
+        end)
+        if result and result.ok then
+            return result
+        end
+        return result or { ok = false, err = "mysql_async_execute_failed" }
+    end
+
+    driver.fetchAll = function(query, params)
         if type(query) ~= "string" then
             return { ok = false, err = "invalid_query" }
         end
         local result = awaitAsync(function(resolve)
             MySQL.Async.fetchAll(query, params or {}, function(rows)
                 resolve({ ok = true, data = rows or {} })
-            end)
-        end)
-        if result and result.ok then
-            return result
-        end
-        return result or { ok = false, err = "mysql_async_fetch_failed" }
-    end
-
-    driver.fetch = function(query, params)
-        if type(query) ~= "string" then
-            return { ok = false, err = "invalid_query" }
-        end
-        local result = awaitAsync(function(resolve)
-            MySQL.Async.fetchAll(query, params or {}, function(rows)
-                resolve({ ok = true, data = (rows and rows[1]) or nil })
             end)
         end)
         if result and result.ok then
@@ -228,7 +206,7 @@ function M.init(opts)
     opts = opts or {}
     logger = opts.logger or defaultLogger
 
-    local prefer = opts.preferDriver or opts.prefer_driver
+    local prefer = opts.preferDriver
     local driver
 
     if prefer == "oxmysql" then
@@ -251,26 +229,14 @@ function M.init(opts)
     end
 
     if not driver then
-        activeDriver = nil
         log("error", "no database driver detected (oxmysql or mysql-async)")
+        activeDriver = nil
         return { ok = false, err = "no_database_driver" }
     end
 
     activeDriver = driver
     log("info", ("database driver active: %s"):format(driver.label))
     return { ok = true, data = { driver = driver.label } }
-end
-
-function M.ready()
-    return activeDriver ~= nil
-end
-
-function M.execute(query, params)
-    local driver, err = ensureDriver()
-    if not driver then
-        return err
-    end
-    return driver.execute(query, params)
 end
 
 function M.insert(query, params)
@@ -281,30 +247,20 @@ function M.insert(query, params)
     return driver.insert(query, params)
 end
 
-function M.fetch(query, params)
+function M.execute(query, params)
     local driver, err = ensureDriver()
     if not driver then
         return err
     end
-    if driver.fetch then
-        return driver.fetch(query, params)
-    end
-    local response = driver.fetch_all(query, params)
-    if not response or not response.ok then
-        return response
-    end
-    return { ok = true, data = response.data and response.data[1] or nil }
+    return driver.execute(query, params)
 end
 
-function M.fetch_all(query, params)
+function M.fetchAll(query, params)
     local driver, err = ensureDriver()
     if not driver then
         return err
     end
-    if driver.fetch_all then
-        return driver.fetch_all(query, params)
-    end
-    return { ok = false, err = "fetch_all_not_supported" }
+    return driver.fetchAll(query, params)
 end
 
 function M.scalar(query, params)
@@ -312,10 +268,7 @@ function M.scalar(query, params)
     if not driver then
         return err
     end
-    if driver.scalar then
-        return driver.scalar(query, params)
-    end
-    return { ok = false, err = "scalar_not_supported" }
+    return driver.scalar(query, params)
 end
 
 return M

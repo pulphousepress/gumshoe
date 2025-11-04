@@ -1,14 +1,4 @@
-local Gumshoe = {}
-
 local resourceName = GetCurrentResourceName()
-local dbWrapper = require("server.db_wrapper")
-
-local state = {
-    config = {},
-    log = function() end,
-    db = nil,
-    configSource = nil
-}
 
 local function loadConfig()
     local search = { "config.lua", "config.example.lua" }
@@ -36,10 +26,16 @@ local function loadConfig()
     return {}, nil
 end
 
-local function makeLogger(config)
-    config.Logging = config.Logging or {}
-    local hook = config.Logging.Hook
-    local level = string.lower(config.Logging.Level or "info")
+local Config, configSource = loadConfig()
+Config.DB = Config.DB or {}
+Config.Rewards = Config.Rewards or {}
+Config.Rewards.XP = Config.Rewards.XP or { min = 0, max = 0 }
+Config.Rewards.Cash = Config.Rewards.Cash or { min = 0, max = 0 }
+Config.Logging = Config.Logging or {}
+
+local function makeLogger()
+    local hook = Config.Logging.Hook
+    local level = string.lower(Config.Logging.Level or "info")
     local levels = { error = 0, warn = 1, info = 2, debug = 3 }
     local threshold = levels[level] or 2
 
@@ -57,8 +53,21 @@ local function makeLogger(config)
     end
 end
 
+local log = makeLogger()
+log("info", ("configuration loaded from %s"):format(configSource or "<defaults>"))
+
+local dbWrapper = require("server.db_wrapper")
+
+local dbInit = dbWrapper.init({
+    preferDriver = Config.DB.Driver ~= "auto" and Config.DB.Driver or nil,
+    logger = log
+})
+
+if not dbInit or not dbInit.ok then
+    log("error", "database driver unavailable; gumshoe persistence disabled", dbInit)
+end
+
 local function computeReward(range)
-    range = range or {}
     local minimum = tonumber(range.min) or 0
     local maximum = tonumber(range.max) or minimum
     if maximum < minimum then
@@ -139,12 +148,13 @@ local function validateInvestigation(payload, src)
     return true, data
 end
 
+local tableName = Config.DB.Table or "gumshoe_investigations"
+
 local function insertInvestigation(data, rewards)
-    if not state.db or not state.db.ok then
+    if not dbInit or not dbInit.ok then
         return { ok = false, err = "no_database_driver" }
     end
 
-    local tableName = state.config.DB and state.config.DB.Table or "gumshoe_investigations"
     local query = string.format([[INSERT INTO `%s`
         (victim_type, victim_identifier, death_time, estimated_time_of_death, cause, critical_area,
          attacker_identifier, scene_data, scene_data_json, investigator_identifier, xp_awarded, payout, metadata)
@@ -171,79 +181,43 @@ local function insertInvestigation(data, rewards)
         return result or { ok = false, err = "insert_failed" }
     end
 
-    return {
-        ok = true,
-        data = {
-            id = result.data and (result.data.insert_id or result.data.insertId) or nil,
-            xp = rewards.xp,
-            cash = rewards.cash
-        }
-    }
+    return { ok = true, data = {
+        id = result.data and result.data.insertId or nil,
+        xp = rewards.xp,
+        cash = rewards.cash
+    } }
 end
 
-function Gumshoe.handleSaveInvestigation(src, payload)
+RegisterNetEvent("gumshoe:server:saveInvestigation", function(payload)
+    local src = source
     local ok, dataOrErr = validateInvestigation(payload, src)
     if not ok then
-        state.log("warn", "invalid investigation payload", { source = src, err = dataOrErr })
+        log("warn", "invalid investigation payload", { source = src, err = dataOrErr })
         TriggerClientEvent("gumshoe:client:receiveInvestigation", src, { ok = false, err = dataOrErr })
         return
     end
 
-    local rewards = {
-        xp = computeReward(state.config.Rewards and state.config.Rewards.XP),
-        cash = computeReward(state.config.Rewards and state.config.Rewards.Cash)
-    }
+    local xp = computeReward(Config.Rewards.XP)
+    local cash = computeReward(Config.Rewards.Cash)
+    local result = insertInvestigation(dataOrErr, { xp = xp, cash = cash })
 
-    local result = insertInvestigation(dataOrErr, rewards)
     if not result.ok then
-        state.log("error", "failed to insert investigation", { source = src, err = result.err })
+        log("error", "failed to insert investigation", { source = src, err = result.err })
         TriggerClientEvent("gumshoe:client:receiveInvestigation", src, { ok = false, err = result.err })
         return
     end
 
-    state.log("info", "investigation saved", {
+    log("info", "investigation saved", {
         source = src,
         investigation_id = result.data.id,
-        xp = rewards.xp,
-        cash = rewards.cash
+        xp = xp,
+        cash = cash
     })
 
     TriggerClientEvent("gumshoe:client:receiveInvestigation", src, {
         ok = true,
         data = result.data
     })
-end
+end)
 
-function Gumshoe.init(cfg)
-    local config, sourceName = loadConfig()
-    state.config = config
-    state.configSource = sourceName or "<defaults>"
-
-    state.config.DB = state.config.DB or {}
-    state.config.Rewards = state.config.Rewards or {}
-    state.config.Rewards.XP = state.config.Rewards.XP or { min = 0, max = 0 }
-    state.config.Rewards.Cash = state.config.Rewards.Cash or { min = 0, max = 0 }
-
-    state.log = makeLogger(state.config)
-    state.log("info", ("configuration loaded from %s"):format(state.configSource))
-
-    state.db = dbWrapper.init({
-        preferDriver = state.config.DB.Driver ~= "auto" and state.config.DB.Driver or nil,
-        logger = state.log
-    })
-
-    if not state.db or not state.db.ok then
-        state.log("error", "database driver unavailable; gumshoe persistence disabled", state.db)
-    end
-
-    RegisterNetEvent("gumshoe:server:saveInvestigation", function(payload)
-        local src = source
-        Gumshoe.handleSaveInvestigation(src, payload)
-    end)
-
-    return true
-end
-
-Gumshoe.init()
-
-return Gumshoe
+return true

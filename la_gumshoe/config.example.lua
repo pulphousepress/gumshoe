@@ -1,14 +1,5 @@
 local Config = {
-    Version = "1.0.0",
     Framework = "qbx", -- qbx, qbox, la_core, standalone
-    FrameworkOptions = {
-        qbx = {
-            PlayerExport = "qbx_core:GetPlayer"
-        },
-        la_core = {
-            PlayerLookupExport = "la_core:getPlayerData"
-        }
-    },
     DetectiveJobs = {
         "police",
         "detective"
@@ -16,18 +7,7 @@ local Config = {
     UseTargetProvider = {
         Enabled = false,
         Provider = "auto", -- auto, ox_target, qtarget, qb-target
-        InteractionDistance = 1.2,
-        Providers = {
-            ox_target = {
-                Resource = "ox_target"
-            },
-            ["qb-target"] = {
-                Resource = "qb-target"
-            },
-            qtarget = {
-                Resource = "qtarget"
-            }
-        }
+        InteractionDistance = 1.2
     },
     Rewards = {
         XP = { min = 10, max = 30 },
@@ -36,7 +16,7 @@ local Config = {
     DB = {
         Table = "gumshoe_investigations",
         Driver = "auto", -- auto, oxmysql, mysql-async
-        Schema = "gumshoe",
+        Schema = "gumshoe"
     },
     AutoTeleport = {
         Enabled = false,
@@ -62,8 +42,7 @@ local Config = {
     },
     Logging = {
         Level = "info",
-        Hook = nil,
-        ForwardToTxAdmin = false
+        Hook = nil
     }
 }
 
