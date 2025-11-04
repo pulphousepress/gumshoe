@@ -3,6 +3,10 @@
 Detective / investigation add-on for \*\*Qbox\*\* (standalone resource). Investigate player \& NPC corpses, reveal estimated time-of-death, cause, critical area highlight on ragdolls, randomized scene flavor, XP / payout rewards, and SQL persistence.
 
 
+---
+
+
+
 \## Features
 
 \- Qbox-first detective add-on.
@@ -220,8 +224,6 @@ Enjoy building crime scenes! 🕵️‍♂️
 Detective / investigation add-on for \*\*Qbox\*\* (standalone resource). Investigate player \& NPC corpses, reveal estimated time-of-death, cause, critical area highlight on ragdolls, randomized scene flavor, XP / payout rewards, and SQL persistence.
 
 
-
-
 ---
 
 
@@ -432,6 +434,7 @@ MIT (see LICENSE)
 
 
 
+---
 
 
 
