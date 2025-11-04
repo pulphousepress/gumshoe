@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notebook</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="fontSelect">
+  <select id="font-style" onchange="changeFont()">
+    <option value="handwriting1">Gloria Hallelujah</option>
+    <option value="handwriting2">Patrick Hand</option>
+    <option value="handwriting3">Indie Flower</option>
+      <option value="handwriting4">Reenie Beanie</option>
+<option value="handwriting5">Rock Salt</option>
+<option value="handwriting6">Allison</option>
+
+  </select>
+</div>
+    <div id="book">
+        <div id="close-x" onclick="save(); closePad();">✕</div>
+        <div class="book-page left" id="page-left">
+            <textarea id="notepadLeft"></textarea>
+            <div class="page-label" id="label-left">Page 1</div>
+            <div class="nav-arrow" id="arrow-left" onclick="prevPages()">←</div>
+        </div>
+        <div class="book-page right" id="page-right">
+            <textarea id="notepadRight"></textarea>
+            <div class="page-label" id="label-right">Page 2</div>
+            <div class="nav-arrow" id="arrow-right" onclick="nextPages()">→</div>
+        </div>
+    </div>
+    <div id="controls" style="display:none;">
+        <button onclick="prevPages()">← Prev</button>
+        <button onclick="nextPages()">Next →</button>
+        <button onclick="save()">Save</button>
+        <button onclick="closePad()">Close</button>
+    </div>
+    <script src="script.js"></script>
+    <audio id="page-flip-sound" src="flip.mp3" preload="auto"></audio>
+</body>
+</html>

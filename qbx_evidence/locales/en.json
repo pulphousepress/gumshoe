@@ -1,0 +1,35 @@
+{
+  "casing": {
+    "label": "Bullet casing",
+    "caliber": "Caliber"
+  },
+  "blood": {
+    "label": "Blood drop",
+    "type": "Blood type"
+  },
+  "print": {
+    "label": "Fingerprint"
+  },
+  "collector": "Collected by",
+  "location": "Found at",
+  "canceled": "Canceled",
+  "clearing_fingerprint": "Clearing fingerprint...",
+  "fingerprint_cleared": "Cleared fingerprint!",
+  "fingerprint": "Fingerprint",
+  "fingerprint_text": "[~g~G~s~] Fingerprint %s",
+  "statuses": {
+    "red_hands": "Red hands",
+    "wide_pupils": "Wide Pupils",
+    "red_eyes": "Red Eyes",
+    "weed_smell": "Smells like weed",
+    "gsr": "Gunshot Residue",
+    "chemicals": "smells chemical",
+    "heavy_breathing": "Breathes heavily",
+    "sweat": "Sweats a lot",
+    "handbleed": "Blood on hands",
+    "confused": "Confused",
+    "alcohol": "Smells like alcohol",
+    "heavy_alcohol": "Smells very much like alcohol",
+    "agitated": "Agitated - Signs of Meth Use"
+  }
+}

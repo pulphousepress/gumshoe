@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>La Gumshoe — Test UI</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app" class="panel hidden">
+    <header>
+      <h1>La Gumshoe — Investigation</h1>
+      <button id="close">✕</button>
+    </header>
+    <main>
+      <div class="row">
+        <div class="card">
+          <h3>Victim</h3>
+          <p id="victimName">—</p>
+          <small id="victimType">—</small>
+        </div>
+        <div class="card">
+          <h3>Estimated TOD</h3>
+          <p id="estTOD">—</p>
+        </div>
+        <div class="card">
+          <h3>Cause</h3>
+          <p id="cause">—</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card full">
+          <h3>Critical Area</h3>
+          <p id="critical">—</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card full">
+          <h3>Clues</h3>
+          <ul id="clues"></ul>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <button id="record">Record Investigation</button>
+      <button id="mark">Mark Evidence</button>
+      <button id="collect">Collect Sample</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

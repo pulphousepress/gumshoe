@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LA Detective Laptop (Wrapped NUI)</title>
+
+  <!-- START: NUI non-blocking laptop override -->
+  <style id="nui-laptop-override">
+    html,body { background: transparent !important; height:100% !important; margin:0; }
+    /* prevent full-screen root from grabbing all clicks; allow only holder interaction */
+    body > * { pointer-events: none !important; }
+    .fullscreen, .app-root--overlay, .overlay, .app-overlay { display:none !important; }
+
+    /* Laptop holder (small visible window) — hidden by default */
+    #nui_laptop_holder {
+      display: none; /* DO NOT show until client requests open */
+      position: fixed;
+      top: 10vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 740px;
+      max-width: 92vw;
+      height: 460px;
+      z-index: 9999;
+      pointer-events: auto;          /* allow interaction inside the holder */
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(28,28,30,0.96), rgba(12,12,14,0.96));
+      box-shadow: 0 18px 50px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    /* Ensure content inside the holder is interactive */
+    #nui_laptop_holder * { pointer-events: auto !important; }
+
+    /* fallback laptop (hidden by default) */
+    #fallback_laptop {
+      display: none; /* hidden by default */
+      position: fixed;
+      top: 10vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 740px;
+      max-width: 92vw;
+      height: 460px;
+      z-index: 9998;
+      pointer-events: none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#ddd;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      text-align:center;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.03);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+
+    @media (max-width:640px){
+      #nui_laptop_holder, #fallback_laptop { width: 94vw; height: 72vh; top: 7vh; }
+    }
+  </style>
+  <!-- END: NUI non-blocking laptop override -->
+
+  <!-- keep your built CSS; if your filename differs, change it here -->
+  <link rel="stylesheet" href="./assets/index-BVPdLD77.css">
+</head>
+<body>
+  <!-- This root is where the React/Vite app will mount -->
+  <div id="root"></div>
+
+  <!-- Fallback laptop (kept hidden) -->
+  <div id="fallback_laptop">Detective Laptop<br><span style="font-size:12px;color:#bfbfbf;margin-top:8px;">Loading UI — open when needed via the client.</span></div>
+
+  <!-- Keep built JS (filename from your build). If your file has a different hash, change this line accordingly -->
+  <script type="module" src="./assets/index-CtouTkP_.js"></script>
+
+  <!-- Auto-detect resource name (change 'detective' if your resource name differs) -->
+  <script>
+    const RESOURCE_NAME = (function(){
+      try {
+        return (window.__resourceName || (typeof GetParentResourceName === 'function' && GetParentResourceName()) || 'detective');
+      } catch (e) { return 'detective'; }
+    })();
+  </script>
+
+  <!-- Robust wrapper: move root children into a small laptop holder, but DO NOT show until client requests open -->
+  <script>
+    (function () {
+      const MAX_WAIT_MS = 8000;
+
+      function createHolderIfMissing() {
+        let holder = document.getElementById('nui_laptop_holder');
+        if (holder) return holder;
+        holder = document.createElement('div');
+        holder.id = 'nui_laptop_holder';
+        return holder;
+      }
+
+      function moveChildrenToHolder(root, holder) {
+        let moved = false;
+        const children = Array.from(root.childNodes);
+        children.forEach(ch => {
+          if (ch === holder) return;
+          holder.appendChild(ch);
+          moved = true;
+        });
+        if (moved) {
+          if (!root.contains(holder)) root.appendChild(holder);
+          const fb = document.getElementById('fallback_laptop');
+          if (fb) fb.style.display = 'none';
+          document.body.style.background = 'transparent';
+        }
+        return moved;
+      }
+
+      function tryWrapRoot() {
+        const root = document.getElementById('root') || document.getElementById('app');
+        if (!root) return false;
+        const holder = createHolderIfMissing();
+        return moveChildrenToHolder(root, holder);
+      }
+
+      function watchAndWrap() {
+        const root = document.getElementById('root') || document.getElementById('app');
+        if (!root) return false;
+
+        if (tryWrapRoot()) return true;
+
+        const holder = createHolderIfMissing();
+        const obs = new MutationObserver((mutations, observer) => {
+          if (moveChildrenToHolder(root, holder)) {
+            try { observer.disconnect(); } catch(e) {}
+          }
+        });
+
+        obs.observe(root, { childList: true, subtree: false });
+        setTimeout(() => { try { obs.disconnect(); } catch(e){} }, MAX_WAIT_MS);
+        return true;
+      }
+
+      // Run wrapper after DOM ready
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(() => { if (!tryWrapRoot()) watchAndWrap(); }, 8);
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => { if (!tryWrapRoot()) watchAndWrap(); }, 8);
+        }, { once: true });
+      }
+
+      // Show/hide holder only on messages from client
+      window.addEventListener('message', (e) => {
+        const d = e.data || {};
+        const holder = document.getElementById('nui_laptop_holder');
+        if (!holder) return;
+        if (d.type === 'open') {
+          holder.style.display = '';
+          holder.focus && holder.focus();
+        }
+        if (d.type === 'close') {
+          holder.style.display = 'none';
+        }
+      });
+
+      // Expose small API for client to call
+      window.nuiClose = function() {
+        const holder = document.getElementById('nui_laptop_holder');
+        if (holder) holder.style.display = 'none';
+      };
+
+      // Pressing Escape will POST a /close to the resource endpoint
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') {
+          try {
+            fetch(`https://${RESOURCE_NAME}/close`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: 'esc' })
+            }).catch(()=>{});
+          } catch(e){}
+        }
+      });
+    })();
+  </script>
+
+  <!-- Defensive: try to remove known global overlays after load (keeps UI from stealing clicks) -->
+  <script>
+    setTimeout(() => {
+      try {
+        const selectors = ['.app-overlay', '.fullscreen-overlay', '.global-overlay', '.modal-backdrop'];
+        selectors.forEach(s => {
+          document.querySelectorAll(s).forEach(el => { el.style.display = 'none'; el.style.pointerEvents = 'none'; });
+        });
+      } catch(e){}
+    }, 1200);
+  </script>
+</body>
+</html>
