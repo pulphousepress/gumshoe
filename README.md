@@ -3,19 +3,6 @@
 Detective / investigation add-on for \*\*Qbox\*\* (standalone resource). Investigate player \& NPC corpses, reveal estimated time-of-death, cause, critical area highlight on ragdolls, randomized scene flavor, XP / payout rewards, and SQL persistence.
 
 
-
-\*\*Promotions\*\*
-
-\- Looking for premium FiveM scripts and top-tier support? Join Cruze Store Discord today!
-
-\- Enhance your FiveM experience with exclusive scripts at Cruze Store!
-
-\- Transform your FiveM server's vehicle storage with the premium Cruze Garages! Get it here. (Features: Public/Private Garages, Job/Gang Garages, vehicle previews, condition tracking, ownership transfer, smart blips \& impound)
-
-\- Also, for interactive scripting help, join FiveM Lua GPT: https://discord.gg/Kmt5WJsb3G
-
-
-
 ---
 
 
@@ -245,19 +232,6 @@ Enjoy building crime scenes! 🕵️‍♂️
 Detective / investigation add-on for \*\*Qbox\*\* (standalone resource). Investigate player \& NPC corpses, reveal estimated time-of-death, cause, critical area highlight on ragdolls, randomized scene flavor, XP / payout rewards, and SQL persistence.
 
 
-
-\*\*Promotions\*\*
-
-\- Looking for premium FiveM scripts and top-tier support? Join Cruze Store Discord today!
-
-\- Enhance your FiveM experience with exclusive scripts at Cruze Store!
-
-\- Transform your FiveM server's vehicle storage with the premium Cruze Garages! Get it here. (Features: Public/Private Garages, Job/Gang Garages, vehicle previews, condition tracking, ownership transfer, smart blips \& impound)
-
-\- Also, for interactive scripting help, join FiveM Lua GPT: https://discord.gg/Kmt5WJsb3G
-
-
-
 ---
 
 
@@ -469,14 +443,6 @@ MIT (see LICENSE)
 
 
 ---
-
-
-
-\## Contact \& help
-
-\- Community support: FiveM Lua GPT: https://discord.gg/Kmt5WJsb3G
-
-\- Cruze Store: join for premium scripts \& support
 
 
 
