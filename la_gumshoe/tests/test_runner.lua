@@ -1,47 +1,64 @@
 -- tests/test_runner.lua
--- Simple smoke test script for local development.
--- Purpose: simulate death reporting and investigation flow.
--- Run: ensure this file is included for testing or manually execute its events
+-- Simulated test harness for Gumshoe server events.
+-- Provides smoke coverage for saveInvestigation event and logs structured output.
 
-local function simulate()
-    local src = 0 -- server origin (simulate)
-    -- a random netId
-    local netId = tostring(math.random(100000,999999))
-    TriggerEvent('la_gumshoe:server:reportDeath', {
-        netId = netId,
-        victim_type = 'npc',
-        victim_identifier = 'npc_test_001',
-        death_time = os.date("%Y-%m-%d %H:%M:%S", os.time() - 3600),
-        cause = 'stabbing',
-        attacker_identifier = 'unknown',
-        critical_area = 'chest'
-    })
+local jsonEncode
+if type(json) == "table" and type(json.encode) == "function" then
+    jsonEncode = function(value)
+        local ok, encoded = pcall(json.encode, value)
+        if ok then
+            return encoded
+        end
+        return "<json-encode-error>"
+    end
+else
+    jsonEncode = function(value)
+        return tostring(value)
+    end
+end
 
-    print("[tests] simulated death reported, netId:", netId)
+local function simulateSaveInvestigation()
+    local payload = {
+        victim_type = "npc",
+        victim_identifier = "npc_test_001",
+        death_time = os.date("%Y-%m-%d %H:%M:%S", os.time() - 720),
+        estimated_tod = os.date("%Y-%m-%d %H:%M:%S", os.time() - 690),
+        cause = "gunshot",
+        critical_area = "torso",
+        attacker_identifier = "unknown",
+        scene_data = {
+            coords = { x = 441.02, y = -981.93, z = 30.68 },
+            clues = { "bullet_casing", "security_camera" }
+        },
+        investigator_id = "test_runner",
+        metadata = {
+            notes = "simulated test payload",
+            version = 1
+        }
+    }
 
-    local cbEvent = 'la_gumshoe:test:cb'
-    AddEventHandler(cbEvent, function(data)
-        print("[tests] received cb:", data and json.encode(data) or "nil")
+    print("[tests] dispatching gumshoe:server:saveInvestigation with payload")
+    print("[tests] payload:", jsonEncode(payload))
+    TriggerEvent("gumshoe:server:saveInvestigation", payload)
+end
+
+local function registerClientSpy()
+    RegisterNetEvent("gumshoe:client:receiveInvestigation", function(result)
+        print("[tests] gumshoe:client:receiveInvestigation =>", jsonEncode(result))
     end)
-
-    TriggerEvent('la_gumshoe:server:requestDeathMeta', { netId = netId }, cbEvent)
-
-    TriggerEvent('la_gumshoe:server:saveInvestigation', {
-        victim_type = 'npc',
-        victim_identifier = 'npc_test_001',
-        death_time = os.date("%Y-%m-%d %H:%M:%S", os.time() - 3600),
-        estimated_tod = os.date("%Y-%m-%d %H:%M:%S", os.time() - 3500),
-        cause = 'stabbing',
-        critical_area = 'chest',
-        attacker_identifier = 'unknown',
-        scene_data = { coords = { x=0,y=0,z=0 }, clues = { "knife_found" } },
-        investigator_id = 'test_runner'
-    })
-
-    print("[tests] simulate save triggered")
 end
 
-if GetCurrentResourceName():find('la_gumshoe') then
-    print("[tests] running simulate()")
-    simulate()
+local function run()
+    registerClientSpy()
+    simulateSaveInvestigation()
+    print("[tests] simulation complete")
 end
+
+if GetCurrentResourceName and GetCurrentResourceName():find("la_gumshoe") then
+    print("[tests] running Gumshoe simulated tests")
+    run()
+end
+
+return {
+    run = run
+}
