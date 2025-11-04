@@ -468,15 +468,6 @@ MIT (see LICENSE)
 
 
 
----
-
-
-
-\## Contact \& help
-
-\- Community support: FiveM Lua GPT: https://discord.gg/Kmt5WJsb3G
-
-\- Cruze Store: join for premium scripts \& support
 
 
 
