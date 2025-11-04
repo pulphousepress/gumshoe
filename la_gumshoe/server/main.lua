@@ -1,117 +1,223 @@
--- server/main.lua
--- Minimal server logic: DB wrapper detection, saveInvestigation, getInvestigation, unlock command
+local resourceName = GetCurrentResourceName()
 
-local cfgf = LoadResourceFile(GetCurrentResourceName(), "config.lua")
-local Config = {}
-if cfgf then
-    local env = {}
-    local ok, chunk = pcall(load, cfgf, "config.lua", "t", env)
-    if ok and chunk then pcall(chunk); Config = env.Config or {} end
-end
-if not Config then Config = {} end
-
-local oxmysql_available = false
-local mysql_async_available = false
-if exports and exports.oxmysql then oxmysql_available = true end
-if MySQL and MySQL.Async and MySQL.Async.execute then mysql_async_available = true end
-
-print(("[la_gumshoe] server starting. DB wrappers - oxmysql: %s mysql-async: %s"):format(tostring(oxmysql_available), tostring(mysql_async_available)))
-
-local function dbExecute(query, params, cb)
-    if oxmysql_available then
-        exports.oxmysql:execute(query, params or {}, function(res) if cb then cb(true, res) end end)
-    elseif mysql_async_available then
-        MySQL.Async.execute(query, params or {}, function(res) if cb then cb(true, res) end end)
-    else
-        if Config.LogToConsole then print("[la_gumshoe] No MySQL wrapper available. Skipping DB write.") end
-        if cb then cb(false) end
+local function loadConfig()
+    local search = { "config.lua", "config.example.lua" }
+    for _, fileName in ipairs(search) do
+        local raw = LoadResourceFile(resourceName, fileName)
+        if raw then
+            local env = {}
+            local chunk, err = load(raw, "@" .. fileName, "t", env)
+            if not chunk then
+                print(("[gumshoe][error] failed to load %s: %s"):format(fileName, err))
+            else
+                local ok, res = pcall(chunk)
+                if not ok then
+                    print(("[gumshoe][error] failed to execute %s: %s"):format(fileName, res))
+                else
+                    local cfg = env.Config or res
+                    if type(cfg) == "table" then
+                        return cfg, fileName
+                    end
+                end
+            end
+        end
     end
+    print("[gumshoe][warn] no config.lua or config.example.lua found, using defaults")
+    return {}, nil
 end
 
-local function dbQuery(query, params, cb)
-    if oxmysql_available then
-        exports.oxmysql:fetch(query, params or {}, function(rows) if cb then cb(rows) end end)
-    elseif mysql_async_available then
-        MySQL.Async.fetchAll(query, params or {}, function(rows) if cb then cb(rows) end end)
-    else
-        if Config.LogToConsole then print("[la_gumshoe] No MySQL wrapper available. Skipping DB query.") end
-        if cb then cb(nil) end
+local Config, configSource = loadConfig()
+Config.DB = Config.DB or {}
+Config.Rewards = Config.Rewards or {}
+Config.Rewards.XP = Config.Rewards.XP or { min = 0, max = 0 }
+Config.Rewards.Cash = Config.Rewards.Cash or { min = 0, max = 0 }
+Config.Logging = Config.Logging or {}
+
+local function makeLogger()
+    local hook = Config.Logging.Hook
+    local level = string.lower(Config.Logging.Level or "info")
+    local levels = { error = 0, warn = 1, info = 2, debug = 3 }
+    local threshold = levels[level] or 2
+
+    return function(severity, message, context)
+        local normalized = string.lower(severity or "info")
+        local rank = levels[normalized] or 2
+        if rank > threshold then
+            return
+        end
+        local payload = ("[gumshoe][%s] %s"):format(normalized, message)
+        print(payload)
+        if type(hook) == "function" then
+            hook(normalized, message, context)
+        end
     end
 end
 
--- Save investigation (called by client NUI)
-RegisterNetEvent('la_gumshoe:server:saveInvestigation', function(payload)
-    local src = source
-    if not payload then
-        print("[la_gumshoe] saveInvestigation called without payload")
-        return
+local log = makeLogger()
+log("info", ("configuration loaded from %s"):format(configSource or "<defaults>"))
+
+local dbWrapper = require("server.db_wrapper")
+
+local dbInit = dbWrapper.init({
+    preferDriver = Config.DB.Driver ~= "auto" and Config.DB.Driver or nil,
+    logger = log
+})
+
+if not dbInit or not dbInit.ok then
+    log("error", "database driver unavailable; gumshoe persistence disabled", dbInit)
+end
+
+local function computeReward(range)
+    local minimum = tonumber(range.min) or 0
+    local maximum = tonumber(range.max) or minimum
+    if maximum < minimum then
+        maximum = minimum
+    end
+    return math.random(minimum, maximum)
+end
+
+local function sanitizeString(value, fallback)
+    if type(value) == "string" and value ~= "" then
+        return value
+    end
+    return fallback
+end
+
+local function sanitizeSceneData(scene)
+    local textValue = "{}"
+    local jsonValue = "{}"
+    if type(scene) == "table" then
+        local ok, encoded = pcall(json.encode, scene)
+        if ok then
+            textValue = encoded
+            jsonValue = encoded
+        end
+    elseif type(scene) == "string" then
+        if scene ~= "" then
+            textValue = scene
+            local ok, decoded = pcall(json.decode, scene)
+            if ok and type(decoded) == "table" then
+                local okEncode, reencoded = pcall(json.encode, decoded)
+                if okEncode then
+                    jsonValue = reencoded
+                end
+            end
+        end
+    end
+    return textValue, jsonValue
+end
+
+local function sanitizeMetadata(metadata)
+    local textValue = "{}"
+    if type(metadata) == "table" then
+        local ok, encoded = pcall(json.encode, metadata)
+        if ok then
+            textValue = encoded
+        end
+    elseif type(metadata) == "string" and metadata ~= "" then
+        textValue = metadata
+    end
+    return textValue
+end
+
+local function validateInvestigation(payload, src)
+    if type(payload) ~= "table" then
+        return false, "invalid_payload_type"
     end
 
-    local xp = math.random(Config.XP.min or 10, Config.XP.max or 30)
-    local payout = math.random(Config.Payout.min or 50, Config.Payout.max or 150)
-    local sceneJSON = "{}"
-    if payload.scene_data then
-        if type(payload.scene_data) == "table" then sceneJSON = json.encode(payload.scene_data) elseif type(payload.scene_data) == "string" then sceneJSON = payload.scene_data end
+    local investigator = sanitizeString(payload.investigator_id, tostring(src))
+    if not investigator then
+        return false, "missing_investigator"
     end
 
-    local q = string.format([[
-        INSERT INTO `%s` (victim_type, victim_identifier, death_time, estimated_time_of_death, cause, critical_area, attacker_identifier, scene_data, investigator_id, xp_awarded, payout)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], Config.DBTable or "dead_investigations")
-
-    local params = {
-        payload.victim_type or "npc",
-        payload.victim_identifier or nil,
-        payload.death_time or os.date("%Y-%m-%d %H:%M:%S"),
-        payload.estimated_tod or nil,
-        payload.cause or "unknown",
-        payload.critical_area or "unknown",
-        payload.attacker_identifier or nil,
-        sceneJSON,
-        payload.investigator_id or tostring(src),
-        xp,
-        payout
+    local sceneText, sceneJson = sanitizeSceneData(payload.scene_data)
+    local data = {
+        victim_type = sanitizeString(payload.victim_type, "npc"),
+        victim_identifier = sanitizeString(payload.victim_identifier, nil),
+        death_time = sanitizeString(payload.death_time, os.date("%Y-%m-%d %H:%M:%S")),
+        estimated_tod = sanitizeString(payload.estimated_tod, nil),
+        cause = sanitizeString(payload.cause, "unknown"),
+        critical_area = sanitizeString(payload.critical_area, "unknown"),
+        attacker_identifier = sanitizeString(payload.attacker_identifier, nil),
+        scene_data = sceneText,
+        scene_data_json = sceneJson,
+        investigator_id = investigator,
+        metadata = sanitizeMetadata(payload.metadata)
     }
 
-    dbExecute(q, params, function(ok, res)
-        if ok then
-            if Config.LogToConsole then print(("[la_gumshoe] Investigation saved by src=%s victim=%s xp=%s payout=%s"):format(tostring(src), tostring(params[2]), tostring(xp), tostring(payout))) end
-            TriggerClientEvent('la_gumshoe:client:investigationSaved', src, { id = nil, xp = xp, payout = payout })
-        else
-            TriggerClientEvent('la_gumshoe:client:investigationSaved', src, { id = nil, xp = 0, payout = 0 })
-        end
-    end)
-end)
+    return true, data
+end
 
--- Simple getter (client provides callback event name)
-RegisterNetEvent('la_gumshoe:server:getInvestigation', function(id, cbEvent)
+local tableName = Config.DB.Table or "gumshoe_investigations"
+
+local function insertInvestigation(data, rewards)
+    if not dbInit or not dbInit.ok then
+        return { ok = false, err = "no_database_driver" }
+    end
+
+    local query = string.format([[INSERT INTO `%s`
+        (victim_type, victim_identifier, death_time, estimated_time_of_death, cause, critical_area,
+         attacker_identifier, scene_data, scene_data_json, investigator_identifier, xp_awarded, payout, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]], tableName)
+
+    local params = {
+        data.victim_type,
+        data.victim_identifier,
+        data.death_time,
+        data.estimated_tod,
+        data.cause,
+        data.critical_area,
+        data.attacker_identifier,
+        data.scene_data,
+        data.scene_data_json,
+        data.investigator_id,
+        rewards.xp,
+        rewards.cash,
+        data.metadata
+    }
+
+    local result = dbWrapper.insert(query, params)
+    if not result or not result.ok then
+        return result or { ok = false, err = "insert_failed" }
+    end
+
+    return { ok = true, data = {
+        id = result.data and result.data.insertId or nil,
+        xp = rewards.xp,
+        cash = rewards.cash
+    } }
+end
+
+RegisterNetEvent("gumshoe:server:saveInvestigation", function(payload)
     local src = source
-    if not id or not cbEvent then
-        TriggerClientEvent(cbEvent, src, nil)
+    local ok, dataOrErr = validateInvestigation(payload, src)
+    if not ok then
+        log("warn", "invalid investigation payload", { source = src, err = dataOrErr })
+        TriggerClientEvent("gumshoe:client:receiveInvestigation", src, { ok = false, err = dataOrErr })
         return
     end
-    local q = string.format("SELECT * FROM `%s` WHERE id = ? LIMIT 1", Config.DBTable or "dead_investigations")
-    dbQuery(q, { tonumber(id) }, function(rows)
-        if rows and #rows > 0 then
-            local row = rows[1]
-            if row.scene_data and type(row.scene_data) == "string" then
-                local ok, parsed = pcall(json.decode, row.scene_data)
-                if ok then row.scene_data = parsed end
-            end
-            TriggerClientEvent(cbEvent, src, row)
-        else
-            TriggerClientEvent(cbEvent, src, nil)
-        end
-    end)
+
+    local xp = computeReward(Config.Rewards.XP)
+    local cash = computeReward(Config.Rewards.Cash)
+    local result = insertInvestigation(dataOrErr, { xp = xp, cash = cash })
+
+    if not result.ok then
+        log("error", "failed to insert investigation", { source = src, err = result.err })
+        TriggerClientEvent("gumshoe:client:receiveInvestigation", src, { ok = false, err = result.err })
+        return
+    end
+
+    log("info", "investigation saved", {
+        source = src,
+        investigation_id = result.data.id,
+        xp = xp,
+        cash = cash
+    })
+
+    TriggerClientEvent("gumshoe:client:receiveInvestigation", src, {
+        ok = true,
+        data = result.data
+    })
 end)
 
--- Console command to force-unfocus NUI on all clients (console-only)
-RegisterCommand('la_gumshoe_unlock', function(source, args, raw)
-    if source ~= 0 then print("This command must be run from the server console.") return end
-    print("[la_gumshoe] unlock broadcast invoked from console")
-    for _, pid in ipairs(GetPlayers()) do
-        TriggerClientEvent('la_gumshoe:client:forceCloseNUI', tonumber(pid))
-    end
-end, false)
-
-print("[la_gumshoe] server loaded")
+return true
